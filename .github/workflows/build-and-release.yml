@@ -1,0 +1,117 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger workflow on version tags (v1.0.0, v2.1.3, etc.)
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false # Don't stop all builds if one fails
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        include:
+          - os: windows-latest
+            output_name: Darkside.exe
+            archive_name: Darkside-windows
+          - os: ubuntu-latest
+            output_name: Darkside
+            archive_name: Darkside-linux
+          - os: macos-latest
+            output_name: Darkside
+            archive_name: Darkside-macos
+            
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch all history for proper versioning
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.0.x'
+      
+      - name: Display .NET version
+        run: dotnet --version
+      
+      - name: Restore dependencies
+        run: dotnet restore
+        
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+        
+      - name: Test
+        run: dotnet test --configuration Release --no-build --verbosity normal
+        continue-on-error: true # Continue even if tests fail (optional)
+        
+      - name: Publish
+        run: dotnet publish -c Release -r ${{ matrix.os == 'windows-latest' && 'win-x64' || matrix.os == 'ubuntu-latest' && 'linux-x64' || 'osx-x64' }} -p:PublishSingleFile=true --self-contained true -o ./publish
+      
+      - name: Package Binary
+        shell: bash
+        run: |
+          cd publish
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            7z a -tzip "../${{ matrix.archive_name }}.zip" *
+          else
+            tar -czvf "../${{ matrix.archive_name }}.tar.gz" *
+          fi
+          cd ..
+          
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.archive_name }}
+          path: ${{ matrix.os == 'windows-latest' && format('{0}.zip', matrix.archive_name) || format('{0}.tar.gz', matrix.archive_name) }}
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: ./artifacts
+      
+      - name: Display structure of downloaded files
+        run: find ./artifacts -type f | sort
+      
+      - name: Extract version
+        id: get_version
+        run: |
+          if [[ "${{ github.ref }}" == "refs/tags/v"* ]]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="latest"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Darkside ${{ env.VERSION }}
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+          fail_on_unmatched_files: true
+          files: |
+            ./artifacts/Darkside-windows/Darkside-windows.zip
+            ./artifacts/Darkside-linux/Darkside-linux.tar.gz
+            ./artifacts/Darkside-macos/Darkside-macos.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 

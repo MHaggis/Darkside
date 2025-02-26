@@ -29,3 +29,38 @@ Darkside.exe -p PID
 
 1) Block this driver through WDAC or wait till Microsoft do it (at your own risk)
 3) Limit local privileges, audit and prevent privesc attacks.
+
+## Automated Builds with GitHub Actions
+
+This repository is configured with GitHub Actions to automatically build and release the Darkside binary for multiple platforms (Windows, macOS, and Linux) when a new version tag is pushed.
+
+### Build and Release Process
+
+The automated build process includes:
+
+1. Building Darkside for multiple platforms (Windows, macOS, Linux)
+2. Packaging the binaries into compressed archives
+3. Creating a GitHub release with the binaries attached
+
+### How to Release a New Version
+
+To release a new version:
+
+1. Update your code with the desired changes
+2. Push your changes to the main branch
+3. Create and push a new tag with a version number:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The GitHub Actions workflow will automatically trigger, build the binaries for all platforms, and create a release with the binaries attached.
+
+### Manual Trigger
+
+You can also manually trigger the build and release process from the "Actions" tab in the GitHub repository.
+
+### Downloaded Binaries
+
+The released binaries can be downloaded directly from the "Releases" section of the GitHub repository. These are ready-to-use executables that don't require additional installation steps.
